@@ -1,5 +1,7 @@
 import time
 import logging
+import re
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -98,3 +100,77 @@ class Device(object):
     if half_decrypted is None: return None
 
     return self.decodeAsDevice(half_decrypted) #decoded as our private key
+
+class RaspberryPi(Device):
+  ''' A subclass specific to Raspberry Pis '''
+
+  def __init__(self, privateKeyLocation=None, publicKeyLocation=None, serverPublicKeyLocation=None):
+    super().__init__(privateKeyLocation=None, publicKeyLocation=None, serverPublicKeyLocation=None)
+
+  def getID(self):
+    """Retreives and returns the CPU Serial ID of the Raspberry Pi that it runs on.
+    """
+    try:
+        f = open('/host-proc/cpuinfo','r')
+        for line in f:
+            if line[0:6]=='Serial':
+                return line[10:26]
+        f.close()
+    except:
+        return 0
+
+  def getWLANMetrics(self):
+    # TODO: somehow get the information from the host
+    """Executes 'iwconfig' and parses results for WLAN diagnostics use."""
+    command_output = ""
+    # Returns the name of the wireless interface
+    interface_name = re.search(r'^\S*', command_output).group(0)
+
+    # Returns the ESSID of the current network
+    essid = re.search(r'ESSID: ?"(\w*)"', command_output).group(1)
+
+    # Returns the cell address of the Access Point that the device is connected to.
+    ap_address = re.search(r'Access Point: ?([A-Fa-f0-9]{2}:[A-Fa-f0-9]{2}:[A-Fa-f0-9]{2}:[A-Fa-f0-9]{2}:[A-Fa-f0-9]{2}:[A-Fa-f0-9]{2})', command_output).group(1)
+    
+    # Returns the operating mode of the connection
+    operating_mode = re.search(r'Mode: ?(\w*)', command_output).group(1)
+
+    # Returns the frequency of the connection, 1st capture group being the number, and the second being the unit
+    frequency = re.search(r'Frequency: ?([0-9]+\.?[0-9]*) ([KMGHz]*)', command_output).group(1)
+    
+    # Returns the bit rate of the connection
+    bit_rate = re.search(r'Bit Rate= ?([0-9]+\.?[0-9]*) ([KMGBb]*/s)', command_output).group(1)
+
+    # Returns the transmission power of the radio
+    tx_power = re.search(r'Tx-Power= ?([-]?[0-9]+\.?[0-9]*) dBm', command_output).group(1)
+
+    retry_short_limit = re.search(r'Retry short limit: ?([0-9]+)', command_output).group(1)
+
+    rts_thr = re.search(r'RTS thr: ?(on|off)', command_output).group(1)
+
+    fragment_thr = re.search(r'Fragment thr: ?(on|off)', command_output).group(1)
+
+    power_management = re.search(r'Power Management: ?(on|off)', command_output).group(1)
+    # Link quality
+    link_quality = re.search(r'Link Quality= ?(\d{1,3})/(\d{1,3})', command_output).group(1)
+    # Link quality, out of (it's always out of 70 but whatever)
+    link_quality_max = re.search(r'Link Quality= ?(\d{1,3})/(\d{1,3})', command_output).group(2)
+
+    sig_lvl = re.search(r'Signal level= ?([-]?[0-9]+\.?[0-9]*) dBm', command_output).group(1)
+
+    invalid_nwid = re.search(r'Rx invalid nwid: ?([0-9]+\.?[0-9]*)', command_output).group(1)
+
+    invalid_crypt = re.search(r'Rx invalid crypt: ?([0-9]+\.?[0-9]*)', command_output).group(1)
+
+    invalid_frag = re.search(r'Rx invalid frag: ?([0-9]+\.?[0-9]*)', command_output).group(1)
+
+    tx_excessive_retries = re.search(r'Tx excessive retries: ?([0-9]+\.?[0-9]*)', command_output).group(1)
+
+    invalid_misc = re.search(r'Invalid misc: ?([0-9]+\.?[0-9]*)', command_output).group(1)
+
+    missed_beacon = re.search(r'Missed beacon: ?([0-9]+\.?[0-9]*)', command_output).group(1)
+
+  def getCPUTemperature(self):
+    """Executes '/opt/vc/bin/vcgencmd measure_temp' to retrieve the CPU temp"""
+    temp = os.popen("/host-vc/bin/vcgencmd measure_temp").readline()
+    return re.search(r"temp=([\d\.]+)'C", temp).group(1)
